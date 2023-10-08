@@ -35,6 +35,12 @@ contract Staking is ERC20 {
         uint256 withdrawal
     );
 
+    event WithdrawStakedTokensAndRewards(
+        address indexed staker,
+        uint256 indexed withdrawEth,
+        uint256 withdrawalReward
+    );
+
     constructor(address _Weth) payable ERC20("DEV PELZ TOKEN", "DPT") {
         Weth = _Weth;
         owner = msg.sender;
@@ -246,15 +252,17 @@ contract Staking is ERC20 {
 
         uint256 stakingReward = calculateStakingReward(msg.sender);
 
-        uint256 total = idToStakingInfo[msg.sender].stakingAmount +
-            stakingReward;
+        uint256 total = idToStakingInfo[msg.sender].stakingAmount;
 
-        idToStakingInfo[msg.sender].stakingTime = 0;
+        delete idToStakingInfo[msg.sender];
+        _burn(msg.sender, total);
 
-        idToStakingInfo[msg.sender].lastTimeStaked = 0;
+        IWETH(Weth).withdraw(total);
 
-        idToStakingInfo[msg.sender].isStakingActive = false;
+        IERC20(address(this)).transfer(msg.sender, stakingReward);
+        (bool s, ) = payable(msg.sender).call{value: total}("");
+        require(s);
 
-        IERC20(address(this)).transfer(msg.sender, total);
+        emit WithdrawStakedTokensAndRewards(msg.sender, total, stakingReward);
     }
 }
