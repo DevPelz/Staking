@@ -203,18 +203,14 @@ contract Staking is ERC20 {
             uint256 stakingReward = calculateStakingReward(staker);
             uint rewards = idToStakingInfo[staker].stakingReward = 0;
 
-            uint256 prevBal = IERC20(Weth).balanceOf(address(this));
+            // update staking amount
+            uint diff = stakingReward + idToStakingInfo[staker].stakingAmount;
 
-            swapDptToWeth(stakingReward);
-
-            uint256 balAfter = IERC20(Weth).balanceOf(address(this));
-
-            uint256 diff = balAfter - prevBal;
+            // mint new tokens
             _mint(staker, diff);
 
-            uint lastStake = idToStakingInfo[staker].lastTimeStaked;
+            uint lastStake = idToStakingInfo[staker].stakingTime;
 
-            bool isComp = idToStakingInfo[staker].isAutoCompounding;
             uint256 _stake = idToStakingInfo[staker].stakingAmount;
 
             StakingInfo memory stakingInfo = StakingInfo(
@@ -223,7 +219,7 @@ contract Staking is ERC20 {
                 lastStake,
                 rewards,
                 true,
-                isComp
+                true
             );
             idToStakingInfo[staker] = stakingInfo;
 
