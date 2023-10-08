@@ -115,15 +115,13 @@ contract Staking is ERC20 {
         uint rewards = idToStakingInfo[msg.sender].stakingReward;
         _mint(msg.sender, msg.value);
 
-        StakingInfo memory stakingInfo = StakingInfo(
-            msg.value,
-            block.timestamp,
-            lastStake,
-            rewards,
-            true,
-            _compound
-        );
-        idToStakingInfo[msg.sender] = stakingInfo;
+        StakingInfo storage stakingInfo = idToStakingInfo[msg.sender];
+        stakingInfo.stakingAmount += msg.value;
+        stakingInfo.stakingTime = block.timestamp;
+        stakingInfo.lastTimeStaked = lastStake;
+        stakingInfo.stakingReward = rewards;
+        stakingInfo.isStakingActive = true;
+        stakingInfo.isAutoCompounding = _compound;
 
         if (idToStakingInfo[msg.sender].isAutoCompounding) {
             stakersWithAutoCompounding.push(msg.sender);
