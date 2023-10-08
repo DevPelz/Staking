@@ -20,6 +20,8 @@ contract Staking is ERC20 {
     error OwnerCannotStake();
     error StakingIsNotActive();
     error AutoCompoundingIsAlreadyEnabled();
+    error InsufficientFunds();
+    error MinimumStakingTimeIsNotPassed();
 
     // events
     event Staked(
@@ -27,15 +29,20 @@ contract Staking is ERC20 {
         uint256 indexed stakingTime,
         uint256 stakingAmount
     );
+    event WithdrawRewards(
+        address indexed staker,
+        uint256 indexed withdraw,
+        uint256 withdrawal
+    );
 
-    constructor(address _Weth) ERC20("DEV PELZ TOKEN", "DPT") {
+    constructor(address _Weth) payable ERC20("DEV PELZ TOKEN", "DPT") {
         Weth = _Weth;
         owner = msg.sender;
         _mint(msg.sender, 10000000000000000 * 10 ** 18);
     }
 
     // add liquidity for weth and dpt
-    function addLiquidity(uint256 weth, uint256 dpt) external {
+    function addLiquidity(uint256 weth, uint256 dpt) public {
         require(msg.sender == owner, "only owner can add liquidity");
         IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
             0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
@@ -82,7 +89,6 @@ contract Staking is ERC20 {
         }
 
         IWETH(Weth).deposit{value: msg.value}();
-        _mint(msg.sender, msg.value);
 
         uint lastStake = block.timestamp -
             idToStakingInfo[msg.sender].lastTimeStaked;
@@ -102,8 +108,10 @@ contract Staking is ERC20 {
 
         if (idToStakingInfo[msg.sender].isAutoCompounding) {
             compondingPool += onepercent;
+            _mint(msg.sender, msg.value - onepercent);
             stakersWithAutoCompounding.push(msg.sender);
         } else {
+            _mint(msg.sender, msg.value);
             stakersWithoutAutoCompounding.push(msg.sender);
         }
 
@@ -151,6 +159,9 @@ contract Staking is ERC20 {
             revert AutoCompoundingIsAlreadyEnabled();
         }
         idToStakingInfo[msg.sender].isAutoCompounding = true;
+        uint onepercent = (idToStakingInfo[msg.sender].stakingAmount * 1) / 100;
+        idToStakingInfo[msg.sender].stakingAmount - onepercent;
+        compondingPool += onepercent;
         stakersWithAutoCompounding.push(msg.sender);
     }
 
@@ -165,34 +176,85 @@ contract Staking is ERC20 {
         for (uint256 i = 0; i < stakersWithAutoCompounding.length; i++) {
             address staker = stakersWithAutoCompounding[i];
             if (
-                block.timestamp - idToStakingInfo[staker].stakingTime < 30 days
+                block.timestamp - idToStakingInfo[staker].stakingTime <
+                30 days ||
+                idToStakingInfo[staker].stakingReward == 0
             ) {
                 continue;
             }
             uint256 stakingReward = calculateStakingReward(staker);
+            uint rewards = idToStakingInfo[staker].stakingReward = 0;
 
-            idToStakingInfo[staker].stakingTime = block.timestamp;
-           uint rewards =  idToStakingInfo[staker].stakingReward = 0;
+            uint256 prevBal = IERC20(Weth).balanceOf(address(this));
+            swapDptToWeth(stakingReward);
 
-            uint daa = swapDptToWeth(stakingReward);
-            _mint(msg.sender, daa );
+            uint256 balAfter = IERC20(Weth).balanceOf(address(this));
 
-            uint lastStake = 
-                idToStakingInfo[staker].lastTimeStaked;
-            
+            uint256 diff = balAfter - prevBal;
+            _mint(staker, diff);
+
+            uint lastStake = idToStakingInfo[staker].lastTimeStaked;
+
             bool isComp = idToStakingInfo[staker].isAutoCompounding;
-          
 
             StakingInfo memory stakingInfo = StakingInfo(
-                msg.value,
+                diff,
                 block.timestamp,
                 lastStake,
-                ,
+                rewards,
                 true,
                 isComp
-                
             );
             idToStakingInfo[msg.sender] = stakingInfo;
         }
+    }
+
+    // withdraw rewards
+    function withdrawRewards(uint256 _amount) external {
+        if (
+            block.timestamp < idToStakingInfo[msg.sender].stakingTime + 7 days
+        ) {
+            revert MinimumStakingTimeIsNotPassed();
+        }
+        if (idToStakingInfo[msg.sender].isStakingActive == false) {
+            revert StakingIsNotActive();
+        }
+
+        if (_amount <= 0) {
+            revert AmountShouldBeGreaterThanZero();
+        }
+        uint256 stakingReward = calculateStakingReward(msg.sender);
+
+        if (stakingReward == 0 || stakingReward < _amount) {
+            revert InsufficientFunds();
+        }
+
+        IERC20(address(this)).transfer(msg.sender, _amount);
+        emit WithdrawRewards(msg.sender, block.timestamp, _amount);
+    }
+
+    // withdraw staked tokens and rewards
+    function withdrawStakedTokensAndRewards() external {
+        if (
+            block.timestamp < idToStakingInfo[msg.sender].stakingTime + 7 days
+        ) {
+            revert MinimumStakingTimeIsNotPassed();
+        }
+        if (idToStakingInfo[msg.sender].isStakingActive == false) {
+            revert StakingIsNotActive();
+        }
+
+        uint256 stakingReward = calculateStakingReward(msg.sender);
+
+        uint256 total = idToStakingInfo[msg.sender].stakingAmount +
+            stakingReward;
+
+        idToStakingInfo[msg.sender].stakingTime = 0;
+
+        idToStakingInfo[msg.sender].lastTimeStaked = 0;
+
+        idToStakingInfo[msg.sender].isStakingActive = false;
+
+        IERC20(address(this)).transfer(msg.sender, total);
     }
 }
