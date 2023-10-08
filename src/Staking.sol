@@ -47,13 +47,12 @@ contract Staking is ERC20 {
     constructor(address _Weth) payable ERC20("DEV PELZ TOKEN", "DPT") {
         Weth = _Weth;
         owner = msg.sender;
-        _mint(msg.sender, 10_000_000_000_000_000 * 10 ** 18);
         IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
             0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
         );
         IERC20(rewardToken).approve(
             address(uniswapV2Router01),
-            balanceOf(address(this)) * 10 ** 18
+            1000000000000 * 10 ** 18
         );
         uniswapV2Router01.addLiquidityETH{value: msg.value}(
             address(rewardToken),
@@ -73,7 +72,7 @@ contract Staking is ERC20 {
         );
         IERC20(rewardToken).approve(
             address(uniswapV2Router01),
-            balanceOf(address(this)) * 10 ** 18
+            100000000000000000 * 10 ** 18
         );
         uniswapV2Router01.addLiquidityETH{value: msg.value}(
             address(rewardToken),
@@ -142,9 +141,13 @@ contract Staking is ERC20 {
         IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
             0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
         );
+        IERC20(rewardToken).approve(
+            address(uniswapV2Router01),
+            100000000000000000 * 10 ** 18
+        );
         address[] memory path = new address[](2);
 
-        path[0] = address(this);
+        path[0] = address(rewardToken);
         path[1] = Weth;
 
         uniswapV2Router01.swapExactTokensForTokens(
@@ -167,7 +170,7 @@ contract Staking is ERC20 {
             idToStakingInfo[_stakingId].stakingAmount) /
             365 days /
             100;
-        return stakingReward;
+        return stakingReward * 10;
     }
 
     //  enable auto compounding
@@ -212,9 +215,10 @@ contract Staking is ERC20 {
             uint lastStake = idToStakingInfo[staker].lastTimeStaked;
 
             bool isComp = idToStakingInfo[staker].isAutoCompounding;
+            uint256 _stake = idToStakingInfo[staker].stakingAmount;
 
             StakingInfo memory stakingInfo = StakingInfo(
-                diff,
+                _stake += diff,
                 block.timestamp,
                 lastStake,
                 rewards,
@@ -251,7 +255,7 @@ contract Staking is ERC20 {
             revert InsufficientFunds();
         }
 
-        IERC20(address(this)).transfer(msg.sender, _amount);
+        rewardToken.mint(msg.sender, _amount);
         emit WithdrawRewards(msg.sender, block.timestamp, _amount);
     }
 
@@ -275,7 +279,7 @@ contract Staking is ERC20 {
 
         IWETH(Weth).withdraw(total);
 
-        IERC20(address(this)).transfer(msg.sender, stakingReward);
+        rewardToken.mint(msg.sender, stakingReward);
         (bool s, ) = payable(msg.sender).call{value: total}("");
         require(s);
 
