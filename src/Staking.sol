@@ -6,11 +6,13 @@ import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {IUniswapV2Factory} from "./interfaces/IUniswapV2Factory.sol";
 import {IUniswapV2Router01} from "./interfaces/IUniswapV2Router01.sol";
+import {RewardToken} from "./Reward.sol";
 
 contract Staking is ERC20 {
     address public Weth;
     address public owner;
     address public wethtodpt;
+    RewardToken public rewardToken;
 
     uint256 public totalPayForExecutor;
 
@@ -40,6 +42,8 @@ contract Staking is ERC20 {
         uint256 withdrawalReward
     );
 
+    event AutoCompounded(uint256 timeCompounded);
+
     constructor(address _Weth) payable ERC20("DEV PELZ TOKEN", "DPT") {
         Weth = _Weth;
         owner = msg.sender;
@@ -47,12 +51,12 @@ contract Staking is ERC20 {
         IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
             0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
         );
-        IERC20(address(this)).approve(
+        IERC20(rewardToken).approve(
             address(uniswapV2Router01),
             balanceOf(address(this)) * 10 ** 18
         );
         uniswapV2Router01.addLiquidityETH{value: msg.value}(
-            address(this),
+            address(rewardToken),
             balanceOf(address(this)),
             0,
             0,
@@ -67,12 +71,12 @@ contract Staking is ERC20 {
         IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
             0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
         );
-        IERC20(address(this)).approve(
+        IERC20(rewardToken).approve(
             address(uniswapV2Router01),
-            dpt * 10 ** 18
+            balanceOf(address(this)) * 10 ** 18
         );
         uniswapV2Router01.addLiquidityETH{value: msg.value}(
-            address(this),
+            address(rewardToken),
             dpt,
             0,
             0,
@@ -110,6 +114,7 @@ contract Staking is ERC20 {
         uint lastStake = block.timestamp -
             idToStakingInfo[msg.sender].lastTimeStaked;
         uint rewards = idToStakingInfo[msg.sender].stakingReward;
+        _mint(msg.sender, msg.value);
 
         StakingInfo memory stakingInfo = StakingInfo(
             msg.value,
@@ -122,10 +127,8 @@ contract Staking is ERC20 {
         idToStakingInfo[msg.sender] = stakingInfo;
 
         if (idToStakingInfo[msg.sender].isAutoCompounding) {
-            _mint(msg.sender, msg.value);
             stakersWithAutoCompounding.push(msg.sender);
         } else {
-            _mint(msg.sender, msg.value);
             stakersWithoutAutoCompounding.push(msg.sender);
         }
 
@@ -198,6 +201,7 @@ contract Staking is ERC20 {
             uint rewards = idToStakingInfo[staker].stakingReward = 0;
 
             uint256 prevBal = IERC20(Weth).balanceOf(address(this));
+
             swapDptToWeth(stakingReward);
 
             uint256 balAfter = IERC20(Weth).balanceOf(address(this));
@@ -224,6 +228,7 @@ contract Staking is ERC20 {
         }
 
         IERC20(Weth).transfer(msg.sender, totalPayForExecutor);
+        emit AutoCompounded(block.timestamp);
     }
 
     // withdraw rewards
