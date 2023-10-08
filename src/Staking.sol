@@ -24,7 +24,6 @@ contract Staking is ERC20 {
     // events
     event Staked(
         address indexed staker,
-        uint256 indexed stakingId,
         uint256 indexed stakingTime,
         uint256 stakingAmount
     );
@@ -59,9 +58,9 @@ contract Staking is ERC20 {
     }
 
     struct StakingInfo {
-        uint256 stakingId;
-        uint256 stakingTime;
         uint256 stakingAmount;
+        uint256 stakingTime;
+        uint256 lastTimeStaked;
         uint256 stakingReward;
         bool isStakingActive;
         bool isAutoCompounding;
@@ -85,12 +84,15 @@ contract Staking is ERC20 {
         IWETH(Weth).deposit{value: msg.value}();
         _mint(msg.sender, msg.value);
 
-        stakingIds++;
+        uint lastStake = block.timestamp -
+            idToStakingInfo[msg.sender].lastTimeStaked;
+        uint rewards = idToStakingInfo[msg.sender].stakingReward;
+
         StakingInfo memory stakingInfo = StakingInfo(
-            stakingIds,
             msg.value,
             block.timestamp,
-            0,
+            lastStake,
+            rewards,
             true,
             _compound
         );
@@ -105,7 +107,7 @@ contract Staking is ERC20 {
             stakersWithoutAutoCompounding.push(msg.sender);
         }
 
-        emit Staked(msg.sender, stakingIds, block.timestamp, msg.value);
+        emit Staked(msg.sender, block.timestamp, msg.value);
     }
 
     // swap dpt to weth
@@ -168,8 +170,29 @@ contract Staking is ERC20 {
                 continue;
             }
             uint256 stakingReward = calculateStakingReward(staker);
+
             idToStakingInfo[staker].stakingTime = block.timestamp;
-            swapDptToWeth(stakingReward);
+           uint rewards =  idToStakingInfo[staker].stakingReward = 0;
+
+            uint daa = swapDptToWeth(stakingReward);
+            _mint(msg.sender, daa );
+
+            uint lastStake = 
+                idToStakingInfo[staker].lastTimeStaked;
+            
+            bool isComp = idToStakingInfo[staker].isAutoCompounding;
+          
+
+            StakingInfo memory stakingInfo = StakingInfo(
+                msg.value,
+                block.timestamp,
+                lastStake,
+                ,
+                true,
+                isComp
+                
+            );
+            idToStakingInfo[msg.sender] = stakingInfo;
         }
     }
 }
