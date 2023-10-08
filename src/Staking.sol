@@ -12,8 +12,7 @@ contract Staking is ERC20 {
     address public owner;
     address public wethtodpt;
 
-    uint256 public stakingIds;
-    uint256 public compondingPool;
+    uint256 public totalPayForExecutor;
 
     error AmountShouldBeGreaterThanZero();
     error InvalidAddress();
@@ -44,24 +43,36 @@ contract Staking is ERC20 {
     constructor(address _Weth) payable ERC20("DEV PELZ TOKEN", "DPT") {
         Weth = _Weth;
         owner = msg.sender;
-        _mint(msg.sender, 10000000000000000 * 10 ** 18);
+        _mint(msg.sender, 10_000_000_000_000_000 * 10 ** 18);
+        IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
+            0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
+        );
+        IERC20(address(this)).approve(
+            address(uniswapV2Router01),
+            balanceOf(address(this)) * 10 ** 18
+        );
+        uniswapV2Router01.addLiquidityETH{value: msg.value}(
+            address(this),
+            balanceOf(address(this)),
+            0,
+            0,
+            address(this),
+            block.timestamp + 1 days
+        );
     }
 
-    // add liquidity for weth and dpt
-    function addLiquidity(uint256 weth, uint256 dpt) public {
+    // add liquidity eth and dpt
+    function addLiquidityEth(uint256 dpt) public payable {
         require(msg.sender == owner, "only owner can add liquidity");
         IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
             0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
         );
-        IERC20(Weth).approve(address(uniswapV2Router01), weth * 10 ** 18);
         IERC20(address(this)).approve(
             address(uniswapV2Router01),
             dpt * 10 ** 18
         );
-        uniswapV2Router01.addLiquidity(
-            Weth,
+        uniswapV2Router01.addLiquidityETH{value: msg.value}(
             address(this),
-            weth,
             dpt,
             0,
             0,
@@ -110,11 +121,8 @@ contract Staking is ERC20 {
         );
         idToStakingInfo[msg.sender] = stakingInfo;
 
-        uint onepercent = (msg.value * 1) / 100;
-
         if (idToStakingInfo[msg.sender].isAutoCompounding) {
-            compondingPool += onepercent;
-            _mint(msg.sender, msg.value - onepercent);
+            _mint(msg.sender, msg.value);
             stakersWithAutoCompounding.push(msg.sender);
         } else {
             _mint(msg.sender, msg.value);
@@ -165,15 +173,13 @@ contract Staking is ERC20 {
             revert AutoCompoundingIsAlreadyEnabled();
         }
         idToStakingInfo[msg.sender].isAutoCompounding = true;
-        uint onepercent = (idToStakingInfo[msg.sender].stakingAmount * 1) / 100;
-        idToStakingInfo[msg.sender].stakingAmount - onepercent;
-        compondingPool += onepercent;
         stakersWithAutoCompounding.push(msg.sender);
     }
 
     // split pool fee 50 / 50
-    function calcSplit() internal view returns (uint256) {
-        uint256 split = compondingPool / 2;
+    function calcSplit(address id) internal view returns (uint256) {
+        uint onepercent = (idToStakingInfo[id].stakingAmount * 1) / 100;
+        uint256 split = onepercent / 2;
         return split;
     }
 
@@ -211,8 +217,13 @@ contract Staking is ERC20 {
                 true,
                 isComp
             );
-            idToStakingInfo[msg.sender] = stakingInfo;
+            idToStakingInfo[staker] = stakingInfo;
+
+            uint pay = calcSplit(staker);
+            totalPayForExecutor += pay;
         }
+
+        IERC20(Weth).transfer(msg.sender, totalPayForExecutor);
     }
 
     // withdraw rewards
