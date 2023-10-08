@@ -44,24 +44,24 @@ contract Staking is ERC20 {
 
     event AutoCompounded(uint256 timeCompounded);
 
-    constructor(address _Weth) payable ERC20("DEV PELZ TOKEN", "DPT") {
+    constructor(address _Weth) ERC20("DEV PELZ TOKEN", "DPT") {
         Weth = _Weth;
         owner = msg.sender;
-        IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
-            0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
-        );
-        IERC20(rewardToken).approve(
-            address(uniswapV2Router01),
-            1000000000000 * 10 ** 18
-        );
-        uniswapV2Router01.addLiquidityETH{value: msg.value}(
-            address(rewardToken),
-            balanceOf(address(this)),
-            0,
-            0,
-            address(this),
-            block.timestamp + 1 days
-        );
+        // IUniswapV2Router01 uniswapV2Router01 = IUniswapV2Router01(
+        //     0xf164fC0Ec4E93095b804a4795bBe1e041497b92a
+        // );
+        // IERC20(rewardToken).approve(
+        //     address(uniswapV2Router01),
+        //     1000000000000 * 10 ** 18
+        // );
+        // uniswapV2Router01.addLiquidityETH{value: msg.value}(
+        //     address(rewardToken),
+        //     balanceOf(address(this)),
+        //     0,
+        //     0,
+        //     address(this),
+        //     block.timestamp + 1 days
+        // );
     }
 
     // add liquidity eth and dpt
