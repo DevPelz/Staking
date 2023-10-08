@@ -3,7 +3,7 @@
 ## state variables
 
 - struct that stores the stakers details including if auto compounding is enabled
-- struct that stores the compoundiing fee pool of the contract
+- variable that holds the total compounding_pool balance.
 - id for stakers
 - mapping of id to staker details
 
@@ -13,10 +13,10 @@
   - minimum of 0.01 eth precisely
   - the function should automatically convert eth to Weth before successfully depositing into the contract`(payable function)`.
     - then transfer weth to the contract
+    - keep track of the weth balance of the depositor as well so as to be able to track the pool
   - mint a recipt/reward token to the depositor
-  - the minted token should be calculated at a 1:10 proportion
+  - the minted token should be calculated at a 1:1 proportion
     - Checks
-      - check that the msg.sender is not address(0)
       - check that the msg.value is strictly greater than 0.01
     - ## Update state
       - automatically set autocompounding to be false
@@ -27,6 +27,8 @@
 - Users can opt for auto compounding
   - it would cost 1% fee of their weth monthly
     - so after every second i calculate how much should be deducted so that after a month it should be equivalent to 1%
+    - create pair with uniswapV2
+    - swap the rewards token back to weth and add to the stake
   - it can be trigggered by anyone externally
   - the person triggering this should be rewarded from the total auto compounding fee that the contract holds in a pool for paying gas
   - how it should work
@@ -37,5 +39,5 @@
 - Users can only withdraw after 7 days
   - checks
     - check that the msg.sender has rewards to claim
-    - check that the withdrawal time is met
+    - check that the withdrawal time is metb
   - transfer the tokens plus rewards back to the user
