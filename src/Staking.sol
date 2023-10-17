@@ -8,6 +8,20 @@ import {IUniswapV2Factory} from "./interfaces/IUniswapV2Factory.sol";
 import {IUniswapV2Router01} from "./interfaces/IUniswapV2Router01.sol";
 import {RewardToken} from "./Reward.sol";
 
+struct StakingInfo {
+    uint256 stakingAmount;
+    uint256 stakingTime;
+    uint256 lastTimeStaked;
+    uint256 stakingReward;
+    bool isStakingActive;
+    bool isAutoCompounding;
+}
+
+enum Compound {
+    Yes,
+    No
+}
+
 contract Staking is ERC20 {
     address public Weth;
     address public owner;
@@ -15,6 +29,7 @@ contract Staking is ERC20 {
     RewardToken public rewardToken;
 
     uint256 public totalPayForExecutor;
+    uint256 public FeesInPool;
 
     error AmountShouldBeGreaterThanZero();
     error InvalidAddress();
@@ -84,22 +99,13 @@ contract Staking is ERC20 {
         );
     }
 
-    struct StakingInfo {
-        uint256 stakingAmount;
-        uint256 stakingTime;
-        uint256 lastTimeStaked;
-        uint256 stakingReward;
-        bool isStakingActive;
-        bool isAutoCompounding;
-    }
-
     address[] public stakersWithAutoCompounding;
     address[] public stakersWithoutAutoCompounding;
 
     mapping(address => StakingInfo) idToStakingInfo;
 
     // stake tokens
-    function stake(bool _compound) external payable {
+    function stake(Compound c) external payable {
         if (msg.sender == owner) {
             revert OwnerCannotStake();
         }
@@ -113,21 +119,27 @@ contract Staking is ERC20 {
         uint lastStake = block.timestamp -
             idToStakingInfo[msg.sender].lastTimeStaked;
         uint rewards = idToStakingInfo[msg.sender].stakingReward;
-        _mint(msg.sender, msg.value);
 
         StakingInfo storage stakingInfo = idToStakingInfo[msg.sender];
+
         stakingInfo.stakingAmount += msg.value;
         stakingInfo.stakingTime = block.timestamp;
         stakingInfo.lastTimeStaked = lastStake;
         stakingInfo.stakingReward = rewards;
         stakingInfo.isStakingActive = true;
-        stakingInfo.isAutoCompounding = _compound;
+
+        if (c == Compound.Yes) {
+            stakingInfo.isAutoCompounding = true;
+        } else {
+            stakingInfo.isAutoCompounding = false;
+        }
 
         if (idToStakingInfo[msg.sender].isAutoCompounding) {
             stakersWithAutoCompounding.push(msg.sender);
         } else {
             stakersWithoutAutoCompounding.push(msg.sender);
         }
+        _mint(msg.sender, msg.value);
 
         emit Staked(msg.sender, block.timestamp, msg.value);
     }
@@ -187,24 +199,43 @@ contract Staking is ERC20 {
         return split;
     }
 
+    // calculate dpt ratio from 10 back to weth 1
+    function calcDptToWeth(uint256 _dptAmtIn) internal pure returns (uint256) {
+        uint256 dptToWeth = (_dptAmtIn * 1) / 10;
+        return dptToWeth;
+    }
+
     // execute auto compounding for all stakers that their stake duration is up to a month
     function executeAutoCompounding() external {
         for (uint256 i = 0; i < stakersWithAutoCompounding.length; i++) {
             address staker = stakersWithAutoCompounding[i];
             if (
-                block.timestamp - idToStakingInfo[staker].stakingTime <
-                30 days ||
-                idToStakingInfo[staker].stakingReward == 0
+                // block.timestamp - idToStakingInfo[staker].stakingTime <
+                // 30 days ||
+                calculateStakingReward(staker) == 0
             ) {
                 continue;
             }
+
             uint256 stakingReward = calculateStakingReward(staker);
             uint rewards = idToStakingInfo[staker].stakingReward = 0;
 
-            // update staking amount
-            uint diff = stakingReward + idToStakingInfo[staker].stakingAmount;
+            // one percent fee
+            uint onepercent = (idToStakingInfo[staker].stakingAmount * 1) / 100;
 
-            // mint new tokens
+            // burn the 1% from staker receipt tokens
+            _burn(staker, onepercent);
+
+            // subtractt 1% from staking amount
+            idToStakingInfo[staker].stakingAmount -= onepercent;
+
+            // convert staking rewards back to 1 : 1 with weth
+            uint dptToWeth = calcDptToWeth(stakingReward);
+
+            // update staking amount
+            uint diff = dptToWeth + idToStakingInfo[staker].stakingAmount;
+
+            // mint more reciept tokens
             _mint(staker, diff);
 
             uint lastStake = idToStakingInfo[staker].stakingTime;
@@ -223,6 +254,7 @@ contract Staking is ERC20 {
 
             uint pay = calcSplit(staker);
             totalPayForExecutor += pay;
+            FeesInPool += pay;
         }
 
         IERC20(Weth).transfer(msg.sender, totalPayForExecutor);
@@ -245,7 +277,7 @@ contract Staking is ERC20 {
         }
         uint256 stakingReward = calculateStakingReward(msg.sender);
 
-        if (stakingReward == 0 || stakingReward < _amount) {
+        if (stakingReward < _amount) {
             revert InsufficientFunds();
         }
 
